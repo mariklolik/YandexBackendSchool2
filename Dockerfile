@@ -15,5 +15,5 @@ COPY . .
 
 
 EXPOSE 80
-CMD ["gunicorn"  ,"-w","30", "--threads", "4", "--bind", "0.0.0.0:80", "app:app"]
+CMD ["gunicorn"  ,"-w","12", "--threads", "6", "--bind", "0.0.0.0:80", "app:app"]
 #CMD ["python3","wsgi.py", "-m" , "flask", "run","--host=0.0.0.0"]
