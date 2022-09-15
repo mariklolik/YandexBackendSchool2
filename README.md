@@ -32,5 +32,8 @@ sudo docker run -d -v data:/YandexBackendSchool2/db/ --publish 80:80 --restart=a
 git clone https://github.com/mariklolik/YandexBackendSchool2.git
 sudo docker volume create --name data
 sudo docker build -t yandexbackend:v0.2 YandexBackendSchool2/
-sudo docker run -d -v data:/YandexBackendSchool2/db/ --publish 80:80 --restart=always yandexbackend:v0.2
+sudo docker run -d -v data:/YandexBackendSchool2/db/ --name="marik_lolik" --publish 80:80 --restart=always yandexbackend:v0.2
 ```
+
+## Запуск контейнера при перезагрузке
+Контейнер автоматически запускается при старте системы. Возможность реализована при помощи планировщика cron.
