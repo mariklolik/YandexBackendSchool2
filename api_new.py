@@ -179,7 +179,7 @@ def FormDict(Leaves):
     del result['_sa_instance_state']
     del result['numericid']
     if result['size'] == 0 and result['type'] == 'FOLDER':
-        result['size'] = None
+        result['size'] = 0
     result['date'] = result['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
     result['children'] = []
     for i in range(1, len(Leaves)):
