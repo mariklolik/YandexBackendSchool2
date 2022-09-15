@@ -27,172 +27,172 @@ def datetime_valid(dt_str):
     return True
 
 
-def ItemInActual(id: str):
+def item_in_actual(id: str):
     session = create_session()
-    Item = session.query(ItemActual).filter(ItemActual.id == id).first()
-    return Item != None
+    item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    return item is not None
 
 
-def update(id: str, NewData: dict, UpdateDate):
+def update(id: str, new_data: dict, update_date):
     session = create_session()
-    ActualItem = session.query(ItemActual).filter(ItemActual.id == id).first()  # Fetching actual item
-    ActualItemJSON = copy(ActualItem.__dict__)
-    del ActualItemJSON['_sa_instance_state']
-    del ActualItemJSON['numericid']  # Auto-increment
-    OldItem = ItemOld(**ActualItemJSON)  # Making a copy with another class
-    session.add(OldItem)  # Push to old
-    session.delete(ActualItem)  # Item not in actual table any more
-    NewData['date'] = UpdateDate
-    NewItem = ItemActual(**NewData)
-    session.add(NewItem)  # To actual table
+    actual_item = session.query(ItemActual).filter(ItemActual.id == id).first()  # Fetching actual item
+    actual_item_json = copy(actual_item.__dict__)
+    del actual_item_json['_sa_instance_state']
+    del actual_item_json['numericid']  # Auto-increment
+    old_item = ItemOld(**actual_item_json)  # Making a copy with another class
+    session.add(old_item)  # Push to old
+    session.delete(actual_item)  # Item not in actual table any more
+    new_data['date'] = update_date
+    new_item = ItemActual(**new_data)
+    session.add(new_item)  # To actual table
     session.commit()
 
 
-def GetSubtree(id, session=None):
-    if (session == None):
+def get_subtree(id, session=None):
+    if session is None:
         session = create_session()
-    Item = session.query(ItemActual).filter(ItemActual.id == id).first()
-    if Item.type == "FILE":
-        return Item
-    Leaves = session.query(ItemActual).filter(ItemActual.parentId == id)
+    item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    if item.type == "FILE":
+        return item
+    leaves = session.query(ItemActual).filter(ItemActual.parentId == id)
     result = []
-    for i in Leaves:
-        result.append(GetSubtree(i.id, session))
-    return [Item, *result]
+    for i in leaves:
+        result.append(get_subtree(i.id, session))
+    return [item, *result]
 
 
-def GetParents(id):
+def get_parents(id):
     session = create_session()
-    Item = session.query(ItemActual).filter(ItemActual.id == id).first()
-    ItemParent = session.query(ItemActual).filter(ItemActual.id == Item.parentId).first()
+    item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    item_parent = session.query(ItemActual).filter(ItemActual.id == item.parentId).first()
     parents = []
-    while (ItemParent != None):
-        parents.append(copy(ItemParent))
-        ItemParent = session.query(ItemActual).filter(ItemActual.id == ItemParent.parentId).first()
+    while item_parent is not None:
+        parents.append(copy(item_parent))
+        item_parent = session.query(ItemActual).filter(ItemActual.id == item_parent.parentId).first()
     return parents
 
 
-def GetSize(ItemId):
+def get_size(item_id):
     session = create_session()
-    ItemItem = session.query(ItemActual).filter(ItemActual.id == ItemId).first()
-    if ItemItem == None:
+    item = session.query(ItemActual).filter(ItemActual.id == item_id).first()
+    if item is None:
         return 0
     size = 0
     children_counter = 0
-    ItemLeaves = GetSubtree(ItemItem.id)
-    if type(ItemLeaves) != list:
-        return ItemLeaves.size, 1
-    for SubObject in ItemLeaves:
+    item_leaves = get_subtree(item.id)
+    if type(item_leaves) != list:
+        return item_leaves.size, 1
+    for SubObject in item_leaves:
         if type(SubObject) == list:  # SubObject is also a tree
-            size, children_counter = size + GetSize(SubObject[0].id)[0], children_counter + \
-                                     GetSize(SubObject[0].id)[1]  # 0 element of subtree is the father-node
+            size, children_counter = size + get_size(SubObject[0].id)[0], children_counter + \
+                                     get_size(SubObject[0].id)[1]  # 0 element of subtree is the father-node
         else:
-            if (SubObject.type == "FILE"):
+            if SubObject.type == "FILE":
                 size += SubObject.size
                 children_counter += 1
     return size, children_counter
 
 
-def UpdateLeavesDate(Leaves, NewDate):
-    for i in Leaves:
+def update_leaves_date(leaves, new_date):
+    for i in leaves:
         if type(i) == list:
-            UpdateLeavesDate(i, NewDate)
+            update_leaves_date(i, new_date)
         else:
-            Ijson = copy(i.__dict__)
-            del Ijson['_sa_instance_state']
-            Ijson['date'] = NewDate
-            update(i.id, Ijson, NewDate)
+            i_json = copy(i.__dict__)
+            del i_json['_sa_instance_state']
+            i_json['date'] = new_date
+            update(i.id, i_json, new_date)
 
 
-def AddToDataBase(Data: dict):
+def add_to_database(data: dict):
     session = create_session()
-    NewItem = ItemActual(**Data)
-    session.add(NewItem)
+    new_item = ItemActual(**data)
+    session.add(new_item)
     session.commit()
 
 
 @blueprint.route("/imports", methods=["POST", "GET"])
 def imports_function():
-    FetchedData = request.json
+    fetched_data = request.json
 
-    UpdateDate = FetchedData['updateDate']
-    if not datetime_valid(UpdateDate):
+    update_date = fetched_data['updateDate']
+    if not datetime_valid(update_date):
         return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
 
-    UpdateDate = datetime.fromisoformat(UpdateDate.replace("Z", "+00:00"))
+    update_date = datetime.fromisoformat(update_date.replace("Z", "+00:00"))
 
-    for item in FetchedData['items']:
-        if ItemInActual(item['id']):
-            update(item['id'], item, UpdateDate)
+    for item in fetched_data['items']:
+        if item_in_actual(item['id']):
+            update(item['id'], item, update_date)
 
-            Leaves = [GetSubtree(item['id'])]
-            UpdateLeavesDate(Leaves, UpdateDate)
+            leaves = [get_subtree(item['id'])]
+            update_leaves_date(leaves, update_date)
 
-            Parents = GetParents(item['id'])
-            for i in Parents:
-                ParentData = i.__dict__
-                del ParentData['_sa_instance_state']
-                FullSize, Offercounter = GetSize(i.id)
-                if Offercounter != 0:
-                    NewParentSize = (FullSize)
+            parents = get_parents(item['id'])
+            for i in parents:
+                parent_data = i.__dict__
+                del parent_data['_sa_instance_state']
+                full_size, offer_counter = get_size(i.id)
+                if offer_counter != 0:
+                    new_parent_size = full_size
                 else:
-                    NewParentSize = 0
-                ParentData['size'] = NewParentSize
-                update(i.id, ParentData, UpdateDate)
+                    new_parent_size = 0
+                parent_data['size'] = new_parent_size
+                update(i.id, parent_data, update_date)
         else:
-            item['date'] = UpdateDate
-            AddToDataBase(item)
-            FullSize, Offercounter = GetSize(item['id'])
-            if Offercounter != 0:
-                item['size'] = (FullSize)
+            item['date'] = update_date
+            add_to_database(item)
+            full_size, offer_counter = get_size(item['id'])
+            if offer_counter != 0:
+                item['size'] = full_size
             else:
                 item['size'] = 0
-            update(item['id'], item, UpdateDate)
-            Parents = GetParents(item['id'])
-            for i in Parents:
-                ParentData = copy(i.__dict__)
-                del ParentData['_sa_instance_state']
-                FullSize, Offercounter = GetSize(ParentData['id'])
-                if Offercounter != 0:
-                    NewParentSize = (FullSize)
+            update(item['id'], item, update_date)
+            parents = get_parents(item['id'])
+            for i in parents:
+                parent_data = copy(i.__dict__)
+                del parent_data['_sa_instance_state']
+                full_size, offer_counter = get_size(parent_data['id'])
+                if offer_counter != 0:
+                    new_parent_size = full_size
                 else:
-                    NewParentSize = 0
-                ParentData['size'] = NewParentSize
-                update(i.id, ParentData, UpdateDate)
+                    new_parent_size = 0
+                parent_data['size'] = new_parent_size
+                update(i.id, parent_data, update_date)
 
     return Response(status=200)
 
 
-def DeleteSubtree(Leaves, session):
-    for i in Leaves:
+def delete_subtree(leaves, session):
+    for i in leaves:
         if type(i) == list:
-            DeleteSubtree(i, session)
+            delete_subtree(i, session)
         else:
-            OldCopies = session.query(ItemOld).filter(ItemOld.id == i.id).all()
-            for old in OldCopies:
+            old_copies = session.query(ItemOld).filter(ItemOld.id == i.id).all()
+            for old in old_copies:
                 session.delete(old)
             session.delete(i)
 
 
-def FormDict(Leaves):
-    result = copy(Leaves[0].__dict__)
+def form_dict(leaves):
+    result = copy(leaves[0].__dict__)
     del result['_sa_instance_state']
     del result['numericid']
     if result['size'] == 0 and result['type'] == 'FOLDER':
         result['size'] = 0
     result['date'] = result['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
     result['children'] = []
-    for i in range(1, len(Leaves)):
-        if type(Leaves[i]) == list:
-            SubTreeJSON = FormDict(Leaves[i])
-            result['children'].append(SubTreeJSON)
+    for i in range(1, len(leaves)):
+        if type(leaves[i]) == list:
+            subtree_json = form_dict(leaves[i])
+            result['children'].append(subtree_json)
         else:
-            SubTreeJSON = copy(Leaves[i].__dict__)
-            del SubTreeJSON['numericid']
-            del SubTreeJSON['_sa_instance_state']
-            SubTreeJSON['date'] = SubTreeJSON['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
-            SubTreeJSON['children'] = None
-            result['children'].append(SubTreeJSON)
+            subtree_json = copy(leaves[i].__dict__)
+            del subtree_json['numericid']
+            del subtree_json['_sa_instance_state']
+            subtree_json['date'] = subtree_json['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
+            subtree_json['children'] = None
+            result['children'].append(subtree_json)
 
     return result
 
@@ -201,25 +201,25 @@ def FormDict(Leaves):
 def delete_item(id: str):
     session = create_session()
 
-    Item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    item = session.query(ItemActual).filter(ItemActual.id == id).first()
 
-    if Item == None:
+    if item is None:
         return json.loads("{\n  \"code\": 404,\n  \"message\": \"Item not found\"\n}"), 404
 
-    Parents = GetParents(Item.id)
-    Leaves = [GetSubtree(id, session)]
-    DeleteSubtree(Leaves, session)
+    parents = get_parents(item.id)
+    leaves = [get_subtree(id, session)]
+    delete_subtree(leaves, session)
     session.commit()
-    for i in Parents:
-        ParentData = i.__dict__
-        del ParentData['_sa_instance_state']
-        FullSize, Offercounter = GetSize(i.id)
-        if Offercounter != 0:
-            NewParentSize = (FullSize)
+    for i in parents:
+        parent_data = i.__dict__
+        del parent_data['_sa_instance_state']
+        full_size, offer_counter = get_size(i.id)
+        if offer_counter != 0:
+            new_parent_size = full_size
         else:
-            NewParentSize = 0
-        ParentData['size'] = NewParentSize
-        update(i.id, ParentData, ParentData['date'])
+            new_parent_size = 0
+        parent_data['size'] = new_parent_size
+        update(i.id, parent_data, parent_data['date'])
 
     session.commit()
     return Response(status=200)
@@ -230,11 +230,11 @@ def info(id: str):
     session = create_session()
     if len(id) != 36:
         return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
-    Item = session.query(ItemActual).filter(ItemActual.id == id).first()
-    if Item == None:
+    item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    if item is None:
         return json.loads("{\n  \"code\": 404,\n  \"message\": \"Item not found\"\n}"), 404
-    Ans = FormDict(GetSubtree(id, session))
-    return json.dumps(Ans)
+    ans = form_dict(get_subtree(id, session))
+    return json.dumps(ans)
 
 
 @blueprint.route("/updates", methods=["GET", "POST"])
@@ -246,57 +246,57 @@ def sales():
         return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
     date = datetime.fromisoformat(date.replace("Z", "+00:00"))
 
-    Items = session.query(ItemActual).filter(ItemActual.type == "FILE", ItemActual.date <= date,
-                                                 ItemActual.date >= date - timedelta(days=1)).all()
-    Ans = {'items': []}
-    for item in Items:
-        ItemJSON = copy(item.__dict__)
-        del ItemJSON['numericid']
-        del ItemJSON['_sa_instance_state']
-        ItemJSON['date'] = ItemJSON['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
-        ItemJSON['children'] = None
-        Ans['items'].append(ItemJSON)
-    if Ans['items'] == []:
-        Ans['items'] = None
+    items = session.query(ItemActual).filter(ItemActual.type == "FILE", ItemActual.date <= date,
+                                             ItemActual.date >= date - timedelta(days=1)).all()
+    ans = {'items': []}
+    for item in items:
+        item_json = copy(item.__dict__)
+        del item_json['numericid']
+        del item_json['_sa_instance_state']
+        item_json['date'] = item_json['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
+        item_json['children'] = None
+        ans['items'].append(item_json)
+    if not ans['items']:
+        ans['items'] = None
     session.close()
-    return json.dumps(Ans)
+    return json.dumps(ans)
 
 
-def GetLastState(id, timestamp, session):
-    AllOldItems = session.query(ItemOld).filter(ItemOld.id == id, ItemOld.date == timestamp)
-    MaxOldItem = max(AllOldItems, key=lambda x: x.numericid)
+def get_last_state(id, timestamp, session):
+    old_items = session.query(ItemOld).filter(ItemOld.id == id, ItemOld.date == timestamp)
+    max_olditem = max(old_items, key=lambda x: x.numericid)
 
-    NewItem = session.query(ItemActual).filter(ItemActual.id == id, ItemActual.date == timestamp).first()
-    if NewItem != None:
-        Item = NewItem
+    new_item = session.query(ItemActual).filter(ItemActual.id == id, ItemActual.date == timestamp).first()
+    if new_item is not None:
+        item = new_item
     else:
-        Item = MaxOldItem
-    return Item
+        item = max_olditem
+    return item
 
 
-def GetSubtreeState(id, timestamp, session):
-    if (session == None):
+def get_subtree_state(id, timestamp, session):
+    if session is None:
         session = create_session()
-    Item = GetLastState(id, timestamp, session)
-    if Item.type == "FILE":
-        return Item
+    item = get_last_state(id, timestamp, session)
+    if item.type == "FILE":
+        return item
 
-    LeavesNew = session.query(ItemActual).filter(ItemActual.parentId == id,
-                                                     ItemActual.date <= timestamp).all()
-    LeavesNewNames = [i.url for i in LeavesNew]
-    LeavesOld = session.query(ItemOld).filter(ItemOld.parentId, ItemOld.date <= timestamp).all()
-    Leaves = [*LeavesNew]
-    for i in LeavesOld:
-        Same = [j for j in LeavesOld if j.url == i.url]
-        MaxLeave = max(Same, key=lambda x: x.numericid)
-        if MaxLeave.url not in LeavesNewNames:
-            Leaves.append(MaxLeave)
-    Leaves = list(set(Leaves))
+    leaves_new = session.query(ItemActual).filter(ItemActual.parentId == id,
+                                                  ItemActual.date <= timestamp).all()
+    leaves_new_names = [i.url for i in leaves_new]
+    leaves_old = session.query(ItemOld).filter(ItemOld.parentId, ItemOld.date <= timestamp).all()
+    leaves = [*leaves_new]
+    for i in leaves_old:
+        same = [j for j in leaves_old if j.url == i.url]
+        max_leave = max(same, key=lambda x: x.numericid)
+        if max_leave.url not in leaves_new_names:
+            leaves.append(max_leave)
+    leaves = list(set(leaves))
 
     result = []
-    for i in Leaves:
-        result.append(GetSubtree(i.id, session))
-    return [Item, *result]
+    for i in leaves:
+        result.append(get_subtree(i.id, session))
+    return [item, *result]
 
 
 @blueprint.route("/node/<string:id>/history", methods=["GET", "POST"])
@@ -304,27 +304,27 @@ def stats(id):
     session = create_session()
     content = request.args
 
-    DateStart = content.get('dateStart')
-    if not datetime_valid(DateStart):
+    date_start = content.get('dateStart')
+    if not datetime_valid(date_start):
         return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
-    DateStart = datetime.fromisoformat(DateStart.replace("Z", "+00:00"))
+    date_start = datetime.fromisoformat(date_start.replace("Z", "+00:00"))
 
-    DateEnd = content.get('dateEnd')
-    if not datetime_valid(DateEnd):
+    date_end = content.get('dateEnd')
+    if not datetime_valid(date_end):
         print("not valid time")
         return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
-    DateEnd = datetime.fromisoformat(DateEnd.replace("Z", "+00:00"))
+    date_end = datetime.fromisoformat(date_end.replace("Z", "+00:00"))
 
-    NewItem = session.query(ItemActual).filter(ItemActual.id == id).first()
-    if NewItem is None:
+    new_item = session.query(ItemActual).filter(ItemActual.id == id).first()
+    if new_item is None:
         return json.loads("{\n  \"code\": 404,\n  \"message\": \"Item not found\"\n}"), 404
 
-    Timestamps = list(
-        set([i.date for i in session.query(ItemOld).filter(ItemOld.id == id, ItemOld.date >= DateStart,
-                                                               ItemOld.date < DateEnd).all()]))
-    Result = {'items': []}
-    # print(DateStart, Timestamps, DateEnd)
-    for time in Timestamps:
-        Item = GetLastState(id, time, session)
-        Result['items'].append(FormDict(GetSubtreeState(Item.id, time, session)))
-    return json.dumps(Result)
+    timestamps = list(
+        set([i.date for i in session.query(ItemOld).filter(ItemOld.id == id, ItemOld.date >= date_start,
+                                                           ItemOld.date < date_end).all()]))
+    result = {'items': []}
+    # print(date_start, timestamps, date_end)
+    for time in timestamps:
+        item = get_last_state(id, time, session)
+        result['items'].append(form_dict(get_subtree_state(item.id, time, session)))
+    return json.dumps(result)
