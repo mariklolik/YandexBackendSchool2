@@ -111,6 +111,22 @@ def add_to_database(data: dict):
     session.commit()
 
 
+def check(item):
+    if item['id'] is None:
+        return False
+    if item["id"] == "null":
+        return False
+    if item["type"] == "FOLDER" and "url" in item.keys() and item["url"] != "null":
+        return False
+    if item["type"] == "FILE" and len(item["url"]) > 255:
+        return False
+    if item["type"] == "FOLDER" and "size" in item.keys() and item["size"] != "null":
+        return False
+    if item["type"] == "FILE" and int(item["size"]) <= 0:
+        return False
+    return True
+
+
 @blueprint.route("/imports", methods=["POST", "GET"])
 def imports_function():
     fetched_data = request.json
@@ -122,6 +138,8 @@ def imports_function():
     update_date = datetime.fromisoformat(update_date.replace("Z", "+00:00"))
 
     for item in fetched_data['items']:
+        if not check(item):
+            return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
         if item_in_actual(item['id']):
             update(item['id'], item, update_date)
 
@@ -175,7 +193,10 @@ def delete_subtree(leaves, session):
 
 
 def form_dict(leaves):
+    if type(leaves) == ItemActual:
+        leaves = [leaves]
     result = copy(leaves[0].__dict__)
+
     del result['_sa_instance_state']
     del result['numericid']
     if result['size'] == 0 and result['type'] == 'FOLDER':
@@ -193,7 +214,9 @@ def form_dict(leaves):
             subtree_json['date'] = subtree_json['date'].strftime("%Y-%m-%dT%H:%M:%SZ")
             subtree_json['children'] = None
             result['children'].append(subtree_json)
-
+    if 'children' in result.keys():
+        if result['children'] == [] and result['type'] == 'FILE':
+            result['children'] = None
     return result
 
 
@@ -228,11 +251,12 @@ def delete_item(id: str):
 @blueprint.route("/nodes/<string:id>", methods=["GET", "POST"])
 def info(id: str):
     session = create_session()
-    if len(id) != 36:
-        return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
+    # if len(id) != 36:
+    #     return json.loads("{\n  \"code\": 400,\n  \"message\": \"Validation Failed\"\n}"), 400
     item = session.query(ItemActual).filter(ItemActual.id == id).first()
     if item is None:
         return json.loads("{\n  \"code\": 404,\n  \"message\": \"Item not found\"\n}"), 404
+    print(item)
     ans = form_dict(get_subtree(id, session))
     return json.dumps(ans)
 
